@@ -1,0 +1,134 @@
+
+services:
+  elt_postgres:
+    image: postgres:14
+    networks:
+      - elt_network
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+  
+  postgres:
+    image: postgres:latest
+    networks:
+      - elt_network
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    depends_on:
+      - elt_postgres
+  backend:
+    build:
+      context: ./backend  # This refers to the backend directory where your Dockerfile is located
+      dockerfile: Dockerfile
+    networks:
+      - elt_network
+    environment:
+      - FLASK_ENV=development
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - S3_BUCKET=${S3_BUCKET}
+    ports:
+      - "5000:5000"
+    depends_on:
+      - elt_postgres
+    volumes:
+      - ./backend:/app 
+  init-airflow:
+    image: apache/airflow:latest
+    depends_on:
+      - postgres
+    networks:
+      - elt_network
+    environment:
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+    command: >
+      bash -c "airflow db init && 
+               airflow users create --username airflow --password password --firstname John --lastname Doe --role Admin --email admin@example.com"
+
+  webserver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    user: root
+    depends_on:
+      - postgres
+    networks:
+      - elt_network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./elt:/opt/airflow/elt
+      - ./dbt:/opt/airflow/dbt
+      - ~/.dbt:/root/.dbt
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - LOAD_EX=n
+      - EXECUTOR=Local
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+      - AIRFLOW_CONN_DESTINATION_POSTGRES=postgres://postgres:secret@postgres:5432/postgres
+      - AIRFLOW__CORE__FERNET_KEY=plIipb9RU3-3wJ1UNaAtqVNJrqFEks1-dGbJM34EW7U=
+      - AIRFLOW__WEBSERVER__DEFAULT_USER_USERNAME=airflow
+      - AIRFLOW__WEBSERVER__DEFAULT_USER_PASSWORD=password
+      - AIRFLOW_WWW_USER_USERNAME=airflow
+      - AIRFLOW_WWW_USER_PASSWORD=password
+      - AIRFLOW__WEBSERVER__SECRET_KEY=secret
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - S3_BUCKET_NAME=datathon-zero
+      - AWS_REGION=eu-west-1
+      - POSTGRES_HOST=elt_postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=secret
+      - POSTGRES_DB=postgres
+    ports:
+      - "8088:8080"
+    command: webserver
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    user: root
+    depends_on:
+      - postgres
+    networks:
+      - elt_network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./elt:/opt/airflow/elt
+      - ./dbt:/opt/airflow/dbt
+      - ~/.dbt:/root/.dbt
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - LOAD_EX=n
+      - EXECUTOR=Local
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+      - AIRFLOW_CONN_DESTINATION_POSTGRES=postgres://postgres:secret@postgres:5432/postgres
+      - AIRFLOW__CORE__FERNET_KEY=plIipb9RU3-3wJ1UNaAtqVNJrqFEks1-dGbJM34EW7U=
+      - AIRFLOW__WEBSERVER__SECRET_KEY=secret
+      - AIRFLOW_WWW_USER_USERNAME=airflow
+      - AIRFLOW_WWW_USER_PASSWORD=password
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - S3_BUCKET_NAME=datathon-zero
+      - AWS_REGION=eu-west-1
+      - POSTGRES_HOST=elt_postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=secret
+      - POSTGRES_DB=postgres
+    command: scheduler
+networks:
+  elt_network:
+    driver: bridge
+volumes:
+  postgres_data:
