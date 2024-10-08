@@ -1,0 +1,1 @@
+SELECT * FROM {{ source('postgres', 'students_bio_data') }}

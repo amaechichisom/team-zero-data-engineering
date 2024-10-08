@@ -1,0 +1,1 @@
+SELECT * FROM {{ source('postgres', 'academic_history_with_teacher') }}

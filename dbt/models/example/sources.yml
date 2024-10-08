@@ -1,0 +1,16 @@
+version: 2
+
+sources:
+  - name: postgres
+    description: "Raw data from the destination PostgreSQL database."
+    database: postgres
+    schema: public
+    tables:
+      - name: academic_history_with_teacher
+        description: "academic history with teacher."
+      - name: parents_bio_data
+        description: "parents bio data"
+      - name: students_bio_data
+        description: "students bio data"
+      - name: Teachers_bio_data
+        description: "Teachers bio data"
